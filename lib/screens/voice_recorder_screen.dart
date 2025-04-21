@@ -365,7 +365,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
     });
 
     try {
-      final result = await _emotionService.analyzeVoiceEmotion(_recordedFilePath!);
+      final result = await _emotionService.analyzeVoiceEmotion(_recordedFilePath!, context: context);
       
       if (mounted) {
         setState(() {
@@ -819,6 +819,34 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
                   ),
               ],
             ),
+            if (!_isAnalyzing && _emotionResult != null && !_emotionResult!.isModelResult)
+              Padding(
+                padding: EdgeInsets.only(top: 8.h),
+                child: Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4.r),
+                    border: Border.all(color: Colors.orange),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.warning, color: Colors.orange, size: 14.r),
+                      SizedBox(width: 4.w),
+                      Flexible(
+                        child: Text(
+                          'Using fallback data (model server unavailable)',
+                          style: TextStyle(
+                            fontSize: 10.sp,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             SizedBox(height: 16.h),
             _isAnalyzing 
                 ? Center(

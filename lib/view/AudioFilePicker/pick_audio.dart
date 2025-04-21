@@ -198,7 +198,7 @@ class _ChooseAudioScreenState extends State<ChooseAudioScreen> {
       }
 
       // Analyze the audio file
-      final result = await _emotionService.analyzeVoiceEmotion(tempFilePath);
+      final result = await _emotionService.analyzeVoiceEmotion(tempFilePath, context: context);
       
       setState(() {
         _analysisResult = result;
@@ -607,15 +607,37 @@ class _ChooseAudioScreenState extends State<ChooseAudioScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Emotion Analysis Results',
-                        style: TextStyle(
-                          fontSize: 18.sp,
-                          fontWeight: FontWeight.bold,
-                          color: themeProvider.isDarkMode
-                              ? Colors.white
-                              : Colors.black87,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Emotion Analysis Results',
+                            style: TextStyle(
+                              fontSize: 18.sp,
+                              fontWeight: FontWeight.bold,
+                              color: themeProvider.isDarkMode
+                                  ? Colors.white
+                                  : Colors.black87,
+                            ),
+                          ),
+                          if (!_analysisResult!.isModelResult)
+                            Container(
+                              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(8.r),
+                                border: Border.all(color: Colors.orange),
+                              ),
+                              child: Text(
+                                'FALLBACK DATA',
+                                style: TextStyle(
+                                  fontSize: 10.sp,
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       Divider(height: 30.h),
                       
