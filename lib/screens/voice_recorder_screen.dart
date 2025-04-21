@@ -28,6 +28,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
   final _audioRecorder = AudioRecorder();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final VoiceEmotionService _emotionService = VoiceEmotionService();
+  final ScrollController _scrollController = ScrollController();
 
   // Speech to text
   final stt.SpeechToText _speechToText = stt.SpeechToText();
@@ -258,6 +259,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
     _waveformController.dispose();
     _audioRecorder.dispose();
     _stopListening();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -370,6 +372,17 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
           _emotionResult = result;
           _isAnalyzing = false;
         });
+        
+        // Scroll to show the analysis results
+        if (_scrollController.hasClients) {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeOut,
+            );
+          });
+        }
       }
     } catch (e) {
       print('Error analyzing audio: $e');
@@ -526,6 +539,8 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
       appBar: AppBar(
         title: const Text('Voice Recorder'),
         elevation: 0,
+        backgroundColor: AppColors.primary.withOpacity(0.1),
+        foregroundColor: AppColors.textPrimary,
         actions: [
           if (_recordedFilePath != null && !_isRecording)
             IconButton(
@@ -537,9 +552,10 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
       ),
       body: SafeArea(
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+          child: ListView(
+            controller: _scrollController,
+            physics: const BouncingScrollPhysics(),
             children: [
               // Recording name and info
               ProfessionalCard(
@@ -598,78 +614,16 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
                 ),
               ),
 
-              SizedBox(height: 20.h),
+              SizedBox(height: 16.h),
 
               // Emotion Analysis Results Card
               if (_emotionResult != null || _isAnalyzing)
-                Padding(
-                  padding: EdgeInsets.only(bottom: 20.h),
-                  child: ProfessionalCard(
-                    padding: EdgeInsets.all(16.w),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Emotion Analysis',
-                              style: TextStyle(
-                                fontSize: 16.sp,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
-                            ),
-                            if (_isAnalyzing)
-                              SizedBox(
-                                width: 20.w,
-                                height: 20.h,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.w,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      AppColors.tertiary),
-                                ),
-                              ),
-                          ],
-                        ),
-                        SizedBox(height: 10.h),
-                        _isAnalyzing 
-                            ? Text(
-                                "Analyzing your voice...",
-                                style: TextStyle(
-                                  fontSize: 14.sp,
-                                  color: AppColors.textSecondary,
-                                ),
-                              )
-                            : Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _buildEmotionIndicator(
-                                    'Detected Emotion', 
-                                    _emotionResult!.emotion,
-                                    _getEmotionColor(_emotionResult!.emotion)
-                                  ),
-                                  SizedBox(height: 8.h),
-                                  _buildEmotionIndicator(
-                                    'Sentiment', 
-                                    _emotionResult!.sentiment,
-                                    _getSentimentColor(_emotionResult!.sentiment)
-                                  ),
-                                  SizedBox(height: 8.h),
-                                  _buildConfidenceBar(_emotionResult!.confidence),
-                                  if (_emotionResult!.emotionScores != null)
-                                    ..._buildEmotionScoreBars(_emotionResult!.emotionScores!),
-                                ],
-                              ),
-                      ],
-                    ),
-                  ),
-                ),
+                _buildEmotionAnalysisCard(),
 
               // Transcription card
               if (_transcription.isNotEmpty || _isRecording)
                 Padding(
-                  padding: EdgeInsets.only(bottom: 20.h),
+                  padding: EdgeInsets.only(bottom: 16.h, top: 16.h),
                   child: ProfessionalCard(
                     padding: EdgeInsets.all(16.w),
                     child: Column(
@@ -701,6 +655,15 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
                         SizedBox(height: 10.h),
                         Container(
                           constraints: BoxConstraints(maxHeight: 100.h),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AppColors.backgroundAlt.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(10.r),
+                            border: Border.all(
+                              color: AppColors.surfaceDark.withOpacity(0.2),
+                            ),
+                          ),
+                          padding: EdgeInsets.all(10.w),
                           child: SingleChildScrollView(
                             child: Text(
                               _transcription.isNotEmpty
@@ -721,7 +684,9 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
                 ),
 
               // Waveform Visualization
-              Expanded(
+              Container(
+                height: 300.h,
+                margin: EdgeInsets.symmetric(vertical: 16.h),
                 child: ProfessionalCard(
                   backgroundColor: AppColors.backgroundAlt.withOpacity(0.5),
                   child: Padding(
@@ -749,66 +714,72 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
                 ),
               ),
 
-              SizedBox(height: 30.h),
+              SizedBox(height: 20.h),
 
               // Control buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  if (_isRecording)
-                    // Pause/Resume button
-                    ModernButton(
-                      text: _isPaused ? 'Resume' : 'Pause',
-                      icon: _isPaused ? Icons.play_arrow : Icons.pause,
-                      onPressed: _toggleRecording,
-                      primaryColor: AppColors.secondary,
-                      height: 50.h,
-                      width: 120.w,
-                    ),
-
-                  // Record/Stop button
-                  GestureDetector(
-                    onTap: _toggleRecording,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      width: 70.w,
-                      height: 70.h,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color:
-                            _isRecording ? AppColors.error : AppColors.tertiary,
-                        boxShadow: [
-                          BoxShadow(
-                            color: (_isRecording
-                                    ? AppColors.error
-                                    : AppColors.tertiary)
-                                .withOpacity(0.3),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
+              Padding(
+                padding: EdgeInsets.only(bottom: 30.h),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    if (_isRecording)
+                      // Pause/Resume button
+                      ModernButton(
+                        text: _isPaused ? 'Resume' : 'Pause',
+                        icon: _isPaused ? Icons.play_arrow : Icons.pause,
+                        onPressed: _toggleRecording,
+                        primaryColor: AppColors.secondary,
+                        height: 50.h,
+                        width: 120.w,
                       ),
-                      child: Center(
-                        child: Icon(
-                          _isRecording ? Icons.stop : Icons.mic,
-                          color: Colors.white,
-                          size: 32.r,
+
+                    // Record/Stop button
+                    Material(
+                      elevation: 8,
+                      shape: const CircleBorder(),
+                      color: _isRecording ? AppColors.error : AppColors.tertiary,
+                      child: GestureDetector(
+                        onTap: _toggleRecording,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          width: 70.w,
+                          height: 70.h,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: (_isRecording
+                                        ? AppColors.error
+                                        : AppColors.tertiary)
+                                    .withOpacity(0.3),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Icon(
+                              _isRecording ? Icons.stop : Icons.mic,
+                              color: Colors.white,
+                              size: 32.r,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  if (_recordedFilePath != null && !_isRecording)
-                    // Save button
-                    ModernButton(
-                      text: 'Save',
-                      icon: Icons.save_alt,
-                      onPressed: _saveRecording,
-                      primaryColor: AppColors.primary,
-                      height: 50.h,
-                      width: 120.w,
-                    ),
-                ],
+                    if (_recordedFilePath != null && !_isRecording)
+                      // Save button
+                      ModernButton(
+                        text: 'Save',
+                        icon: Icons.save_alt,
+                        onPressed: _saveRecording,
+                        primaryColor: AppColors.primary,
+                        height: 50.h,
+                        width: 120.w,
+                      ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -817,143 +788,88 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
     );
   }
 
-  // Widget for the waveform visualization during recording
-  Widget _buildWaveform() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: List.generate(_waveformLevels.length, (index) {
-        // Create a pulsing effect when paused
-        double level = _isPaused
-            ? _waveformLevels[index] * (0.5 + 0.5 * _waveformController.value)
-            : _waveformLevels[index];
-
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 50),
-          width: 6.w,
-          height: (70.h * level) + 10.h,
-          decoration: BoxDecoration(
-            color: _isPaused ? AppColors.secondary : AppColors.tertiary,
-            borderRadius: BorderRadius.circular(3.r),
-          ),
-        );
-      }),
-    );
-  }
-
-  // Widget for displaying playback controls when recording is complete
-  Widget _buildPlaybackInterface() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Text(
-          'Recording Complete',
-          style: TextStyle(
-            fontSize: 18.sp,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-          ),
-        ),
-        SizedBox(height: 20.h),
-        Icon(
-          Icons.multitrack_audio,
-          size: 60.r,
-          color: AppColors.primary,
-        ),
-        if (_transcription.isNotEmpty &&
-            _transcription != 'Listening...' &&
-            _transcription != 'No speech detected')
-          Padding(
-            padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
-            child: Text(
-              'Transcription available',
-              style: TextStyle(
-                fontSize: 14.sp,
-                color: AppColors.success,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        SizedBox(height: 20.h),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildEmotionAnalysisCard() {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.h),
+      child: ProfessionalCard(
+        padding: EdgeInsets.all(16.w),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconButton(
-              onPressed: _restartPlayback,
-              icon: Icon(Icons.replay, size: 24.r),
-              color: AppColors.secondary,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Emotion Analysis',
+                  style: TextStyle(
+                    fontSize: 16.sp,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (_isAnalyzing)
+                  SizedBox(
+                    width: 20.w,
+                    height: 20.h,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.w,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                          AppColors.tertiary),
+                    ),
+                  ),
+              ],
             ),
-            SizedBox(width: 16.w),
-            IconButton(
-              onPressed: _togglePlayback,
-              icon: Icon(
-                _isPlayingBack
-                    ? Icons.pause_circle_filled
-                    : Icons.play_circle_filled,
-                size: 48.r,
-              ),
-              color: AppColors.primary,
-            ),
+            SizedBox(height: 16.h),
+            _isAnalyzing 
+                ? Center(
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          width: 40.w,
+                          height: 40.h,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3.w,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                                AppColors.tertiary),
+                          ),
+                        ),
+                        SizedBox(height: 10.h),
+                        Text(
+                          "Analyzing your voice...",
+                          style: TextStyle(
+                            fontSize: 14.sp,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildEmotionIndicator(
+                        'Detected Emotion', 
+                        _emotionResult!.emotion,
+                        _getEmotionColor(_emotionResult!.emotion)
+                      ),
+                      SizedBox(height: 12.h),
+                      _buildEmotionIndicator(
+                        'Sentiment', 
+                        _emotionResult!.sentiment,
+                        _getSentimentColor(_emotionResult!.sentiment)
+                      ),
+                      SizedBox(height: 12.h),
+                      _buildConfidenceBar(_emotionResult!.confidence),
+                      if (_emotionResult!.emotionScores != null)
+                        ..._buildEmotionScoreBars(_emotionResult!.emotionScores!),
+                    ],
+                  ),
           ],
         ),
-        SizedBox(height: 16.h),
-        // Playback progress
-        Container(
-          width: double.infinity,
-          height: 4.h,
-          decoration: BoxDecoration(
-            color: AppColors.surfaceDark,
-            borderRadius: BorderRadius.circular(2.r),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: (_playbackPosition / _recordingDuration) * 320.w,
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(2.r),
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(height: 8.h),
-        Text(
-          '${_formatDuration(_playbackPosition)} / ${_formatDuration(_recordingDuration)}',
-          style: TextStyle(
-            fontSize: 14.sp,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
+      ),
     );
   }
 
-  // Widget to show when ready to record but not yet started
-  Widget _buildReadyToRecord() {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        PulseAnimation(
-          child: Icon(
-            Icons.mic,
-            size: 80.r,
-            color: AppColors.primary.withOpacity(0.7),
-          ),
-        ),
-        SizedBox(height: 20.h),
-        Text(
-          'Tap the record button to start',
-          style: TextStyle(
-            fontSize: 16.sp,
-            color: AppColors.textSecondary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Helper methods for emotion display
   Widget _buildEmotionIndicator(String label, String value, Color color) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1038,7 +954,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
       ..sort((a, b) => b.value.compareTo(a.value));
     
     return [
-      SizedBox(height: 12.h),
+      SizedBox(height: 16.h),
       Text(
         'Emotion Breakdown',
         style: TextStyle(
@@ -1048,7 +964,7 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
         ),
       ),
       SizedBox(height: 8.h),
-      ...sortedEmotions.map((entry) {
+      ...sortedEmotions.take(4).map((entry) { // Only show top 4 emotions
         return Padding(
           padding: EdgeInsets.only(bottom: 6.h),
           child: Column(
@@ -1098,6 +1014,182 @@ class _VoiceRecorderScreenState extends State<VoiceRecorderScreen>
         );
       }).toList(),
     ];
+  }
+
+  // Widget for the waveform visualization during recording
+  Widget _buildWaveform() {
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 20.h),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20.r),
+        color: AppColors.background.withOpacity(0.3),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: List.generate(_waveformLevels.length, (index) {
+          // Create a pulsing effect when paused
+          double level = _isPaused
+              ? _waveformLevels[index] * (0.5 + 0.5 * _waveformController.value)
+              : _waveformLevels[index];
+
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 50),
+            width: 6.w,
+            height: (70.h * level) + 10.h,
+            decoration: BoxDecoration(
+              color: _isPaused 
+                ? AppColors.secondary
+                : _getWaveformColor(level),
+              borderRadius: BorderRadius.circular(3.r),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Color _getWaveformColor(double level) {
+    // Create a gradient effect based on level
+    if (level > 0.8) {
+      return AppColors.tertiary;
+    } else if (level > 0.4) {
+      return AppColors.tertiary.withOpacity(0.8);
+    } else {
+      return AppColors.tertiary.withOpacity(0.6);
+    }
+  }
+
+  // Widget for displaying playback controls when recording is complete
+  Widget _buildPlaybackInterface() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'Recording Complete',
+          style: TextStyle(
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        SizedBox(height: 20.h),
+        Container(
+          padding: EdgeInsets.all(15.w),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.primary.withOpacity(0.1),
+          ),
+          child: Icon(
+            Icons.multitrack_audio,
+            size: 60.r,
+            color: AppColors.primary,
+          ),
+        ),
+        if (_transcription.isNotEmpty &&
+            _transcription != 'Listening...' &&
+            _transcription != 'No speech detected')
+          Padding(
+            padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 16.w),
+            child: Text(
+              'Transcription available',
+              style: TextStyle(
+                fontSize: 14.sp,
+                color: AppColors.success,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        SizedBox(height: 20.h),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(
+              onPressed: _restartPlayback,
+              icon: Icon(Icons.replay, size: 24.r),
+              color: AppColors.secondary,
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.secondary.withOpacity(0.1),
+              ),
+            ),
+            SizedBox(width: 16.w),
+            IconButton(
+              onPressed: _togglePlayback,
+              icon: Icon(
+                _isPlayingBack
+                    ? Icons.pause_circle_filled
+                    : Icons.play_circle_filled,
+                size: 48.r,
+              ),
+              color: AppColors.primary,
+              style: IconButton.styleFrom(
+                backgroundColor: AppColors.primary.withOpacity(0.1),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 16.h),
+        // Playback progress
+        Container(
+          width: double.infinity,
+          height: 8.h,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceDark,
+            borderRadius: BorderRadius.circular(4.r),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: (_playbackPosition / _recordingDuration) * 320.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(4.r),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: 8.h),
+        Text(
+          '${_formatDuration(_playbackPosition)} / ${_formatDuration(_recordingDuration)}',
+          style: TextStyle(
+            fontSize: 14.sp,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Widget to show when ready to record but not yet started
+  Widget _buildReadyToRecord() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        PulseAnimation(
+          child: Container(
+            padding: EdgeInsets.all(20.w),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.primary.withOpacity(0.1),
+            ),
+            child: Icon(
+              Icons.mic,
+              size: 80.r,
+              color: AppColors.primary.withOpacity(0.7),
+            ),
+          ),
+        ),
+        SizedBox(height: 20.h),
+        Text(
+          'Tap the record button to start',
+          style: TextStyle(
+            fontSize: 16.sp,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ],
+    );
   }
 
   // Helper methods for colors
