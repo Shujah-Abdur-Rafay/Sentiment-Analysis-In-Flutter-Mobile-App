@@ -1,0 +1,2 @@
+C:/Users/scien/OneDrive/Desktop/vocal_emotion/vocal_emotion/android/app/.cxx/Debug/3j5kx406/x86/CMakeFiles/edit_cache.dir
+C:/Users/scien/OneDrive/Desktop/vocal_emotion/vocal_emotion/android/app/.cxx/Debug/3j5kx406/x86/CMakeFiles/rebuild_cache.dir

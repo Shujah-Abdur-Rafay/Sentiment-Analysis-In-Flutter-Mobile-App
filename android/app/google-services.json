@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "402082703433",
+    "project_id": "vocalaiapp",
+    "storage_bucket": "vocalaiapp.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:402082703433:android:32627a9ff9104ca9903798",
+        "android_client_info": {
+          "package_name": "com.example.vocal_emotion"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCxJCy1-HkGOdsSu8U7WDAB4I7TYpq8uVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
