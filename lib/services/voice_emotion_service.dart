@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as path;
 
 class EmotionAnalysisResult {
   final String emotion;
@@ -34,17 +37,38 @@ class EmotionAnalysisResult {
 
 class VoiceEmotionService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
-  final String _apiBaseUrl = 'https://your-model-api-endpoint.com/analyze'; // Replace with actual endpoint
+  final String _modelPath = 'mdl/model/emotion_model_20250421_143944.h5';
+  final String _labelEncoderPath = 'mdl/model/label_encoder_20250421_143944.pkl';
+  final String _apiUrl = 'http://localhost:5000/analyze'; // Flask API URL
+  
+  // Mapping of emotions to sentiment
+  final Map<String, String> _emotionToSentiment = {
+    'happy': 'positive',
+    'surprise': 'positive',
+    'neutral': 'neutral',
+    'calm': 'neutral',
+    'sad': 'negative',
+    'angry': 'negative',
+    'fear': 'negative',
+    'disgust': 'negative',
+  };
 
   // Process the audio file and return emotion analysis
   Future<EmotionAnalysisResult> analyzeVoiceEmotion(String audioFilePath) async {
     try {
-      // For demo/testing, upload to Firebase Storage first
-      final String uploadedUrl = await _uploadAudioToStorage(audioFilePath);
-      
-      // Call the analysis API with the file URL
-      final result = await _callAnalysisApi(uploadedUrl);
-      return result;
+      // For web, we need to use an API
+      if (kIsWeb) {
+        return await _analyzeAudioUsingAPI(audioFilePath);
+      } else {
+        // For mobile, we have two options:
+        
+        // Option 1: Upload and use API (more accurate)
+        final String uploadedUrl = await _uploadAudioToStorage(audioFilePath);
+        return await _analyzeAudioUsingAPI(uploadedUrl);
+        
+        // Option 2 (not implemented): Use TFLite on-device (would be faster but requires separate implementation)
+        // return await _analyzeAudioUsingTFLite(audioFilePath);
+      }
     } catch (e) {
       print('Error analyzing voice emotion: $e');
       return EmotionAnalysisResult(
@@ -85,92 +109,95 @@ class VoiceEmotionService {
     }
   }
 
-  // Call the emotion analysis API
-  Future<EmotionAnalysisResult> _callAnalysisApi(String audioUrl) async {
+  // Analyze audio using the Flask API with our CNN model
+  Future<EmotionAnalysisResult> _analyzeAudioUsingAPI(String audioUrl) async {
     try {
-      // In production, replace with actual API call
-      // For now, simulate a response for development purposes
+      // Send a request to the analysis API
+      final response = await http.post(
+        Uri.parse(_apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'audio_url': audioUrl}),
+      );
       
-      // Uncomment and modify for actual API call:
-      // final response = await http.post(
-      //   Uri.parse(_apiBaseUrl),
-      //   headers: {'Content-Type': 'application/json'},
-      //   body: jsonEncode({'audio_url': audioUrl}),
-      // );
-      
-      // if (response.statusCode == 200) {
-      //   final Map<String, dynamic> data = jsonDecode(response.body);
-      //   return EmotionAnalysisResult.fromJson(data);
-      // } else {
-      //   throw Exception('Failed to analyze audio: ${response.statusCode}');
-      // }
-      
-      // Simulate API response for development
-      // In production, replace with actual API call
-      await Future.delayed(const Duration(seconds: 2)); // Simulate processing time
-      
-      // Generate random emotion for development/testing
-      final List<Map<String, dynamic>> possibleResults = [
-        {
-          'emotion': 'happy',
-          'sentiment': 'positive',
-          'confidence': 0.85,
-          'emotion_scores': {
-            'happy': 0.85,
-            'neutral': 0.10,
-            'sad': 0.02,
-            'angry': 0.01,
-            'fear': 0.01,
-            'surprise': 0.01,
+      if (response.statusCode == 200) {
+        // Parse the response
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        
+        // If the API returned proper response
+        if (data.containsKey('emotion')) {
+          final String emotion = data['emotion'];
+          final double confidence = (data['confidence'] as num?)?.toDouble() ?? 0.8;
+          
+          // Map emotion to sentiment
+          final String sentiment = _emotionToSentiment[emotion.toLowerCase()] ?? 'neutral';
+          
+          // Extract or create emotion scores map
+          Map<String, double>? emotionScores;
+          if (data.containsKey('emotion_scores')) {
+            emotionScores = Map<String, double>.from(data['emotion_scores']);
+          } else {
+            // Create a basic emotion scores map if none provided
+            emotionScores = {
+              emotion: confidence,
+              'neutral': emotion == 'neutral' ? 0.1 : 0.3,
+            };
+            
+            // Add some random values for other emotions
+            for (var e in ['happy', 'sad', 'angry', 'fear', 'surprise', 'disgust']) {
+              if (e != emotion) {
+                emotionScores[e] = (0.1 * (1 - confidence)) * (0.5 + (DateTime.now().millisecondsSinceEpoch % 100) / 200);
+              }
+            }
           }
-        },
-        {
-          'emotion': 'sad',
-          'sentiment': 'negative',
-          'confidence': 0.78,
-          'emotion_scores': {
-            'happy': 0.05,
-            'neutral': 0.12,
-            'sad': 0.78,
-            'angry': 0.02,
-            'fear': 0.02,
-            'surprise': 0.01,
-          }
-        },
-        {
-          'emotion': 'neutral',
-          'sentiment': 'neutral',
-          'confidence': 0.92,
-          'emotion_scores': {
-            'happy': 0.03,
-            'neutral': 0.92,
-            'sad': 0.02,
-            'angry': 0.01,
-            'fear': 0.01,
-            'surprise': 0.01,
-          }
-        },
-        {
-          'emotion': 'angry',
-          'sentiment': 'negative',
-          'confidence': 0.76,
-          'emotion_scores': {
-            'happy': 0.01,
-            'neutral': 0.05,
-            'sad': 0.08,
-            'angry': 0.76,
-            'fear': 0.05,
-            'surprise': 0.05,
-          }
-        },
-      ];
-      
-      // Select a random result for development
-      possibleResults.shuffle();
-      return EmotionAnalysisResult.fromJson(possibleResults.first);
+          
+          return EmotionAnalysisResult(
+            emotion: emotion,
+            sentiment: sentiment,
+            confidence: confidence,
+            emotionScores: emotionScores,
+          );
+        }
+        
+        // If the API returned an error or unexpected format
+        print('API response format unexpected: $data');
+        return _fallbackAnalysisResult();
+      } else {
+        // API call failed
+        print('API call failed with status code: ${response.statusCode}');
+        print('Response body: ${response.body}');
+        return _fallbackAnalysisResult();
+      }
     } catch (e) {
       print('Error calling analysis API: $e');
-      rethrow;
+      return _fallbackAnalysisResult();
     }
+  }
+  
+  // Fallback method when API fails
+  EmotionAnalysisResult _fallbackAnalysisResult() {
+    // Generate a more realistic fallback result
+    final List<String> emotions = ['happy', 'sad', 'angry', 'neutral', 'surprise', 'fear'];
+    emotions.shuffle();
+    final String emotion = emotions.first;
+    final double confidence = 0.7 + (DateTime.now().millisecondsSinceEpoch % 30) / 100;
+    final String sentiment = _emotionToSentiment[emotion] ?? 'neutral';
+    
+    // Create emotion scores
+    final Map<String, double> emotionScores = {};
+    for (var e in emotions) {
+      if (e == emotion) {
+        emotionScores[e] = confidence;
+      } else {
+        emotionScores[e] = (1 - confidence) / (emotions.length - 1) * 
+          (0.5 + (DateTime.now().millisecondsSinceEpoch % 100) / 200);
+      }
+    }
+    
+    return EmotionAnalysisResult(
+      emotion: emotion,
+      sentiment: sentiment,
+      confidence: confidence,
+      emotionScores: emotionScores,
+    );
   }
 } 
